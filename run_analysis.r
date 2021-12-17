@@ -26,7 +26,7 @@ if ( !dir.exists("data") )
 library("dataReporter")
 
 # Convert the dataReporter .rmd report in .md
-library("knitr")
+library("rmarkdown")
 
 # Nice print of file paths tree
 library("data.tree")
@@ -91,13 +91,14 @@ make_codebook <- function(table_data, base_path = "data") {
    
    # Generate file paths
    rmd_file_name <- "CodeBook.rmd"
-   rmd_file_path <- file.path(base_path, table_name, rmd_file_name)
-   md_file_path <- sub("rmd", "md", rmd_file_path)
+   md_file_name <- sub("rmd", "md", rmd_file_name)
+   file_dir_path <- file.path(base_path, table_name)
+   rmd_file_path <- file.path(file_dir_path, rmd_file_name)
    
    # Create the folder if it does not already exists
-   if ( !dir.exists(file.path(base_path, table_name)) )
+   if ( !dir.exists(file_dir_path) )
    {
-      dir.create(file.path(base_path, table_name))
+      dir.create(file_dir_path)
    }
    
    # Auto-generated report in rmd format
@@ -111,11 +112,10 @@ make_codebook <- function(table_data, base_path = "data") {
                   openResult  = F,
                   render      = F)
    
-   # Convert the rmd file in md
-   opts_knit$set(base.dir   = file.path(base_path, table_name))
-   opts_knit$set(out.format = "github_document")
-   knit(input  = rmd_file_path,
-        output = md_file_path)
+   # Convert the rmd file in md 
+   rmarkdown::render(input         = rmd_file_path,
+                     output_file   = md_file_name,
+                     output_format = "github_document")
    
    # Clean-up removing not needed files
    file.remove(rmd_file_path)
