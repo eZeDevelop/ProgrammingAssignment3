@@ -14,14 +14,6 @@
 # Clear the environment
 rm( list = ls() )
 
-# R and RStudio are stupid as there is no straightforward way to specify a
-# the root folder to this script file
-if ( dir.exists("03-getting-and-cleaning-data") )
-{
-   # Assume the working directory is RStudio project root
-   setwd(paste(getwd(), "03-getting-and-cleaning-data", sep = "/"))
-}
-
 # Create the data folder if it does not already exists
 if ( !dir.exists("data") )
 {
@@ -30,11 +22,107 @@ if ( !dir.exists("data") )
 
 # ----------------------------------------------------------------- Dependences
 
+# Document and create reports on data cleanliness.
+library("dataReporter")
+
+# Convert the dataReporter .rmd report in .md
+library("knitr")
+
 # Nice print of file paths tree
 library("data.tree")
 
 # Join the club
 library("tidyverse")
+
+# ----------------------------------------------------------- Utility functions
+
+# Load a table from a file compressed into the downloaded zip
+load_zipped_table <- function(file_name, extract_in = "data") {
+   
+   # Identify only the file of interest
+   file_in_zip <- grep(pattern = paste0("(^|.*/)", file_name),
+                       value   = T,
+                       zip_files)
+   unzipped_file_path <- file.path(extract_in, file_in_zip)
+   
+   # Do not extract the file if it has already been decompressed
+   if ( !file.exists(unzipped_file_path) )
+   {
+      unzip(zip_file_path,
+            files = c(file_in_zip),
+            exdir = extract_in)
+   }
+   
+   # Load the table and return it as tibble
+   as_tibble(read.table(unzipped_file_path))
+}
+
+# Save the table as in txt file
+save_to_txt <- function(table_data, base_path = "data") {
+   
+   # Rename the input table to its original name
+   table_name <- deparse(substitute(table_data))
+   code <- paste0(table_name, " <- table_data")
+   eval(parse(text = code))
+   
+   # Generate file paths
+   txt_file_name <- "table.txt"
+   txt_file_path <- file.path(base_path, table_name, txt_file_name)
+
+   # Create the folder if it does not already exists
+   if ( !dir.exists(file.path(base_path, table_name)) )
+   {
+      dir.create(file.path(base_path, table_name))
+   }
+   
+   # Let's export what we obtained
+   write.table(eval(parse(text = table_name)),
+               file = txt_file_path,
+               row.names = F)
+}
+
+# Generate the CodeBook report
+make_codebook <- function(table_data, base_path = "data") {
+   
+   # Rename the input table to its original name
+   table_name <- deparse(substitute(table_data))
+   code <- paste0(table_name, " <- table_data")
+   eval(parse(text = code))
+   
+   # Generate file paths
+   rmd_file_name <- "CodeBook.rmd"
+   rmd_file_path <- file.path(base_path, table_name, rmd_file_name)
+   md_file_path <- sub("rmd", "md", rmd_file_path)
+   
+   # Create the folder if it does not already exists
+   if ( !dir.exists(file.path(base_path, table_name)) )
+   {
+      dir.create(file.path(base_path, table_name))
+   }
+   
+   # Auto-generated report in rmd format
+   makeDataReport(data        = eval(parse(text = table_name)),
+                  file        = rmd_file_path,
+                  mode        = c("summarize", "visualize", "check"),
+                  reportTitle = table_name,
+                  codebook    = T, 
+                  smartNum    = F,
+                  replace     = T,
+                  openResult  = F,
+                  render      = F,
+                  quiet       = T)
+   
+   # Convert the rmd file in md
+   opts_knit$set(base.dir = file.path(base_path, table_name))
+   knit(input  = rmd_file_path,
+        output = md_file_path)
+   
+   # Clean-up removing not needed files
+   file.remove(rmd_file_path)
+   
+   # Nothing to return
+   invisible(T)
+}
 
 # --------------------------------------------------------------- Retrieve data
 
@@ -51,26 +139,6 @@ if ( !file.exists(zip_file_path) )
 zip_files <- unzip(zip_file_path, list = T)$Name
 zip_tree <- data.tree::as.Node(data.frame(pathString = zip_files))
 zip_tree
-
-# Utility function to load a table from a file compressed into the downloaded
-# zip
-load_zipped_table <- function(file_name, extract_in = "data") {
-   # Identify only the file of interest
-   file_in_zip <- grep(pattern = paste0("(^|.*/)", file_name),
-                       value   = T,
-                       zip_files)
-   unzipped_file_path <- file.path(extract_in, file_in_zip)
-
-   # Do not extract the file if it has already been decompressed
-   if( ! file.exists(unzipped_file_path) )
-   {
-      unzip(zip_file_path,
-            files = c(file_in_zip),
-            exdir = extract_in)
-   }
-   # Load the table and return it as tibble
-   as_tibble(read.table(unzipped_file_path))
-}
 
 # -------------------------------------------------------------------- 1. Merge
 # Merges the training and the test sets to create one data set.
@@ -187,32 +255,8 @@ tbl_tidy_1 <- tbl_merged %>%
    pivot_wider(names_from   = statistic,
                values_from  = value)
 
-# Let's export what we obtained
-write.table(tbl_tidy_1,
-            file = file.path("data", "tbl_tidy_1.txt"),
-            row.names = F)
-
-# Now we can plot some graphs
-tbl_tidy_1 %>%
-   # Select a subject and only the time analyses
-   filter(subject   == 2,
-          domain    == "TIME",
-          component == "Body",
-          sensor    == "Acc",
-          axis      == "MAG") %>%
-   # Convert the activity to a number in order to plot it
-   with(plot(time, mean,
-             type = "o",
-             main = "Accelerometer signal over time",
-             ylab = "Normalised accelleration magnitude [-1,1]",
-             xlab = "Time [s]",
-             col  = activity,
-             pch  = 16))  %>%
-   with(grid()) %>%
-   with(legend("topleft",
-               legend = unique(tbl_tidy_1$activity),
-               pch    = 16,
-               col    = unique(tbl_tidy_1$activity)))
+# Save the data
+save_to_txt(tbl_tidy_1)
 
 # ----------------------------------------------------------- 5. Second dataset
 # From the data set in step 4, creates a second, independent tidy data set with
@@ -233,8 +277,188 @@ tbl_tidy_2 <- tbl_tidy_1 %>%
                     ~ mean(.x,
                            na.rm = T)))
 
-# Let's export what we obtained
-write.table(tbl_tidy_2,
-            file = file.path("data", "tbl_tidy_2.txt"),
-            row.names = F)
 
+# Save the data
+save_to_txt(tbl_tidy_2)
+
+# -------------------------------------------------------------------- CodeBook
+
+# Give some information on the data
+attr(tbl_tidy_1$time, "label") <- "Timestamp of last window sample"
+attr(tbl_tidy_1$time, "shortDescription") <- paste0(
+   "The 'time' column provides the riconstructed information about ",
+   "the time the variable is computed. This information is only ",
+   "indirectly available in the original data set, where time domain ",
+   "signals were captured at a constant rate of 50 Hz (20 ms period) ",
+   "and sampled in fixed-width sliding windows of 2.56 sec and 50% ",
+   "overlap (128 readings/window)."
+)
+attr(tbl_tidy_1$activity, "label") <- "Activity performed by the person"
+attr(tbl_tidy_1$activity, "shortDescription") <- paste0(
+   "Each person performed six activities (WALKING, WALKING_UPSTAIRS, ",
+   "WALKING_DOWNSTAIRS, SITTING, STANDING, LAYING). The experiments ",
+   "have been video-recorded to label the data manually."
+)
+attr(tbl_tidy_1$subject, "label") <- "Person performing the activity"
+attr(tbl_tidy_1$subject, "shortDescription") <- paste0(
+   "A group of 30 volunteers within an age bracket of 19-48 years ",
+   "carried out the experiments."
+)
+attr(tbl_tidy_1$domain, "label") <- "Physical domain of the variable"
+attr(tbl_tidy_1$domain, "shortDescription ") <- paste0(
+   "From each window, a vector of features was obtained by calculating ",
+   "variables either from the time or frequency domain."
+)
+attr(tbl_tidy_1$component, "label") <- "Physical domain of the variable"
+attr(tbl_tidy_1$component, "shortDescription") <- paste0(
+   "The sensor acceleration signals have gravitational and body motion ",
+   "components, separated using a Butterworth low-pass filter into body ",
+   "acceleration and gravity. The gravitational force is assumed to have ",
+   "only low frequency components, therefore a filter with 0.3 Hz cutoff ",
+   "frequency was used. Gyroscope signals have only body motion component."
+)
+attr(tbl_tidy_1$sensor, "label") <- "Embedded accelerometer or gyroscope"
+attr(tbl_tidy_1$sensor, "shortDescription") <- paste0(
+   "Linear acceleration and angular velocity are captured using  a ",
+   "smartphone's embedded accelerometer and gyroscope sensors. The body ",
+   "linear acceleration and angular velocity were derived in time to ",
+   "obtain Jerk signals."
+)
+attr(tbl_tidy_1$axis, "label") <- "3-axial signals"
+attr(tbl_tidy_1$axis, "shortDescription") <- paste0(
+   "3-axial linear acceleration and 3-axial angular velocity are captured. ",
+   "Also the magnitude of these three-dimensional signals were calculated ",
+   "using the Euclidean norm."
+)
+attr(tbl_tidy_1$mean, "label") <- "Mean value"
+attr(tbl_tidy_1$mean, "shortDescription") <- paste0(
+   "Mean value normalized and bounded within [-1,1], estimated from the ",
+   "3-axial linear acceleration and 3-axial angular velocity signals."
+)
+attr(tbl_tidy_1$std, "label") <- "Standard deviation"
+attr(tbl_tidy_1$std, "shortDescription") <- paste0(
+   "Standard deviation normalized and bounded within [-1,1], estimated ",
+   "from the 3-axial linear acceleration and 3-axial angular velocity ",
+   "signals."
+)
+attr(tbl_tidy_1$time, "label") <- "Timestamp of last window sample"
+attr(tbl_tidy_1$time, "shortDescription") <- paste0(
+   "The 'time' column provides the riconstructed information about ",
+   "the time the variable is computed. This information is only ",
+   "indirectly available in the original data set, where time domain ",
+   "signals were captured at a constant rate of 50 Hz (20 ms period) ",
+   "and sampled in fixed-width sliding windows of 2.56 sec and 50% ",
+   "overlap (128 readings/window)."
+)
+attr(tbl_tidy_1$activity, "label") <- "Activity performed by the person"
+attr(tbl_tidy_1$activity, "shortDescription") <- paste0(
+   "Each person performed six activities (WALKING, WALKING_UPSTAIRS, ",
+   "WALKING_DOWNSTAIRS, SITTING, STANDING, LAYING). The experiments ",
+   "have been video-recorded to label the data manually."
+)
+attr(tbl_tidy_1$subject, "label") <- "Person performing the activity"
+attr(tbl_tidy_1$subject, "shortDescription") <- paste0(
+   "A group of 30 volunteers within an age bracket of 19-48 years ",
+   "carried out the experiments."
+)
+attr(tbl_tidy_1$domain, "label") <- "Physical domain of the variable"
+attr(tbl_tidy_1$domain, "shortDescription") <- paste0(
+   "From each window, a vector of features was obtained by calculating ",
+   "variables either from the time or frequency domain."
+)
+attr(tbl_tidy_1$component, "label") <- "Physical domain of the variable"
+attr(tbl_tidy_1$component, "shortDescription") <- paste0(
+   "The sensor acceleration signals have gravitational and body motion ",
+   "components, separated using a Butterworth low-pass filter into body ",
+   "acceleration and gravity. The gravitational force is assumed to have ",
+   "only low frequency components, therefore a filter with 0.3 Hz cutoff ",
+   "frequency was used. Gyroscope signals have only body motion component."
+)
+attr(tbl_tidy_1$sensor, "label") <- "Embedded accelerometer or gyroscope"
+attr(tbl_tidy_1$sensor, "shortDescription") <- paste0(
+   "Linear acceleration and angular velocity are captured using  a ",
+   "smartphone's embedded accelerometer and gyroscope sensors. The body ",
+   "linear acceleration and angular velocity were derived in time to ",
+   "obtain Jerk signals."
+)
+attr(tbl_tidy_1$axis, "label") <- "3-axial signals"
+attr(tbl_tidy_1$axis, "shortDescription") <- paste0(
+   "3-axial linear acceleration and 3-axial angular velocity are captured. ",
+   "Also the magnitude of these three-dimensional signals were calculated ",
+   "using the Euclidean norm."
+)
+attr(tbl_tidy_1$mean, "label") <- "Mean value"
+attr(tbl_tidy_1$mean, "shortDescription") <- paste0(
+   "Mean value normalized and bounded within [-1,1], estimated from the ",
+   "3-axial linear acceleration and 3-axial angular velocity signals."
+)
+attr(tbl_tidy_1$std, "label") <- "Standard deviation"
+attr(tbl_tidy_1$std, "shortDescription") <- paste0(
+   "Standard deviation normalized and bounded within [-1,1], estimated ",
+   "from the 3-axial linear acceleration and 3-axial angular velocity ",
+   "signals."
+)
+
+attr(tbl_tidy_2$activity, "label") <- attr(tbl_tidy_1$activity, "label")
+attr(tbl_tidy_2$activity, "shortDescription") <- 
+   attr(tbl_tidy_1$activity, "shortDescription")
+attr(tbl_tidy_2$subject, "label") <- attr(tbl_tidy_1$subject, "label")
+attr(tbl_tidy_2$subject, "shortDescription") <- 
+   attr(tbl_tidy_1$subject, "shortDescription")
+attr(tbl_tidy_2$domain, "label") <- attr(tbl_tidy_1$domain, "label")
+attr(tbl_tidy_2$domain, "shortDescription") <- 
+   attr(tbl_tidy_1$domain, "shortDescription")
+attr(tbl_tidy_2$component, "label") <- attr(tbl_tidy_1$component, "label")
+attr(tbl_tidy_2$component, "shortDescription") <- 
+   attr(tbl_tidy_1$component, "shortDescription")
+attr(tbl_tidy_2$sensor, "label") <- attr(tbl_tidy_1$sensor, "label")
+attr(tbl_tidy_2$sensor, "shortDescription") <- 
+   attr(tbl_tidy_1$sensor, "shortDescription")
+attr(tbl_tidy_2$axis, "label") <- attr(tbl_tidy_1$axis, "label")
+attr(tbl_tidy_2$axis, "shortDescription") <- 
+   attr(tbl_tidy_1$axis, "shortDescription")
+attr(tbl_tidy_2$mean, "label") <- attr(tbl_tidy_1$mean, "label")
+attr(tbl_tidy_2$mean, "shortDescription") <- 
+   attr(tbl_tidy_1$mean, "shortDescription")
+attr(tbl_tidy_2$std, "label") <- attr(tbl_tidy_1$std, "label")
+attr(tbl_tidy_2$std, "shortDescription") <- 
+   attr(tbl_tidy_1$std, "shortDescription")
+
+# Generate reports
+make_codebook(tbl_tidy_1)
+make_codebook(tbl_tidy_2)
+
+# ---------------------------------------------------------------- Example plot 
+
+# Specify the image file the example plot will be saved to
+png(filename = file.path("data", "example_plot.png"),
+    width    = 1024,
+    height   = 1024/(16/9))
+
+# Now we can plot some graphs
+tbl_tidy_1 %>%
+   # Select a subject and only the time analyses
+   filter(subject   == 2,
+          domain    == "TIME",
+          component == "Body",
+          sensor    == "Acc",
+          axis      == "MAG") %>%
+   # Convert the activity to a number in order to plot it
+   plot(mean ~ time,
+        data = .,
+        type = "o",
+        main = "Accelerometer signal over time",
+        ylab = "Normalised accelleration magnitude [-1,1]",
+        xlab = "Time [s]",
+        col  = activity,
+        pch  = 16)  %>%
+   # Add grid to the plot
+   grid() %>%
+   # Add legend to the plot
+   legend("topleft",
+          legend = unique(tbl_tidy_1$activity),
+          pch    = 16,
+          col    = unique(tbl_tidy_1$activity))
+
+# Save the plot
+dev.off()
