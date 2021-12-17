@@ -1,4 +1,4 @@
-"activity" "subject" "domain" "component" "sensor" "axis" "mean" "std"
+"activity" "subject" "domain" "component" "sensor" "axis" "mean.mean" "std.mean"
 "LAYING" "1" "TIME" "Body" "Acc" "MAG" -0.8419291525 -0.79514486386
 "LAYING" "1" "TIME" "Body" "Acc" "X" 0.22159824394 -0.9280564692
 "LAYING" "1" "TIME" "Body" "Acc" "Y" -0.0405139534294 -0.83682740562

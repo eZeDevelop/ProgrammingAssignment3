@@ -109,11 +109,11 @@ make_codebook <- function(table_data, base_path = "data") {
                   smartNum    = F,
                   replace     = T,
                   openResult  = F,
-                  render      = F,
-                  quiet       = T)
+                  render      = F)
    
    # Convert the rmd file in md
-   opts_knit$set(base.dir = file.path(base_path, table_name))
+   opts_knit$set(base.dir   = file.path(base_path, table_name))
+   opts_knit$set(out.format = "github_document")
    knit(input  = rmd_file_path,
         output = md_file_path)
    
@@ -273,9 +273,14 @@ tbl_tidy_2 <- tbl_tidy_1 %>%
 
    # Draw the requested statistics observing that the only numerical columns
    # corresponds to the values (other columns previously converted to factor)
-   summarise(across(where(is.numeric),
+   summarise(across(matches("mean|std"),
                     ~ mean(.x,
-                           na.rm = T)))
+                           na.rm = T))) %>%
+   
+   # Since the "mean" and "std" columns result from applying a further "mean"
+   # operation over time, rename the corresponding columns
+   rename(mean.mean = mean,
+          std.mean  = std)
 
 
 # Save the data
@@ -417,11 +422,11 @@ attr(tbl_tidy_2$sensor, "shortDescription") <-
 attr(tbl_tidy_2$axis, "label") <- attr(tbl_tidy_1$axis, "label")
 attr(tbl_tidy_2$axis, "shortDescription") <- 
    attr(tbl_tidy_1$axis, "shortDescription")
-attr(tbl_tidy_2$mean, "label") <- attr(tbl_tidy_1$mean, "label")
-attr(tbl_tidy_2$mean, "shortDescription") <- 
+attr(tbl_tidy_2$mean.mean, "label") <- "Mean of the data windows' mean over time"
+attr(tbl_tidy_2$mean.mean, "shortDescription") <- 
    attr(tbl_tidy_1$mean, "shortDescription")
-attr(tbl_tidy_2$std, "label") <- attr(tbl_tidy_1$std, "label")
-attr(tbl_tidy_2$std, "shortDescription") <- 
+attr(tbl_tidy_2$std.mean, "label") <- "Mean of the data windows' std over time"
+attr(tbl_tidy_2$std.mean, "shortDescription") <- 
    attr(tbl_tidy_1$std, "shortDescription")
 
 # Generate reports
@@ -431,7 +436,11 @@ make_codebook(tbl_tidy_2)
 # ---------------------------------------------------------------- Example plot 
 
 # Specify the image file the example plot will be saved to
-png(filename = file.path("data", "example_plot.png"),
+plot_image_path <- file.path("data", "example_plot.png")
+if (file.exists(plot_image_path)) {
+   file.remove(plot_image_path)
+}
+png(filename = plot_image_path,
     width    = 1024,
     height   = 1024/(16/9))
 
@@ -451,14 +460,14 @@ tbl_tidy_1 %>%
         ylab = "Normalised accelleration magnitude [-1,1]",
         xlab = "Time [s]",
         col  = activity,
-        pch  = 16)  %>%
-   # Add grid to the plot
-   grid() %>%
-   # Add legend to the plot
-   legend("topleft",
-          legend = unique(tbl_tidy_1$activity),
-          pch    = 16,
-          col    = unique(tbl_tidy_1$activity))
+        pch  = 16)
+# Add grid to the plot
+grid()
+# Add legend to the plot
+legend("topleft",
+       legend = unique(tbl_tidy_1$activity),
+       pch    = 16,
+       col    = unique(tbl_tidy_1$activity))
 
 # Save the plot
 dev.off()
